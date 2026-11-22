@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Launch Radar - pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-in">
+    <p class="kicker">Token Launch Radar</p>
+    <h1>Protocols with no token yet,<br>ranked by what a launch could be worth.</h1>
+    <p class="standfirst">A sealed DefiLlama snapshot of <span id="as-of">2026-11-14</span>, priced by one
+      stated model. The board ranks every pre-token protocol the snapshot supports;
+      protocols whose token already trades are kept apart, at the market's own values.</p>
+    <dl class="stats" id="stats"></dl>
+    <p class="formula"><span class="formula-label">The model</span>
+      <span class="formula-body">implied value = category multiple &times; TVL &times; scale &times; growth &times; maturity</span>
+      <span class="formula-note">model <span id="model-id">radar-comps-1</span> - Category Comps with Sublinear TVL. Open any row for its working.</span>
+    </p>
+  </div>
+</header>
+
+<main>
+  <section id="board-view">
+    <div class="controls">
+      <label class="ctl ctl-search">Search
+        <input id="q" type="search" placeholder="name or slug" autocomplete="off">
+      </label>
+      <label class="ctl">Category
+        <select id="cat"></select>
+      </label>
+      <label class="ctl">Chain
+        <select id="chain"></select>
+      </label>
+      <label class="ctl ctl-check">
+        <input id="watch-only" type="checkbox"> House watchlist only
+      </label>
+      <label class="ctl ctl-check">
+        <input id="floor-only" type="checkbox"> Above the $50M floor
+      </label>
+      <p class="count" id="count"></p>
+    </div>
+
+    <table class="board" id="board">
+      <thead>
+        <tr>
+          <th data-sort="rank" class="num sortable">Rank</th>
+          <th data-sort="name" class="sortable">Protocol</th>
+          <th>Category</th>
+          <th>Chains</th>
+          <th data-sort="tvl" class="num sortable">TVL</th>
+          <th data-sort="change" class="num sortable">7d %</th>
+          <th data-sort="age" class="num sortable">Age</th>
+          <th data-sort="multiple" class="num sortable">Multiple</th>
+          <th data-sort="implied" class="num sortable">Implied value</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="empty" id="empty" hidden>No protocol matches those filters. Loosen one and the board comes back.</p>
+
+    <section class="live">
+      <h2>Already trading</h2>
+      <p class="live-note">The snapshot's tokenised protocols are not ranked by the model. The largest by
+        market cap, at the market's own values - the comparables the category multiples are built from.</p>
+      <div class="live-grid" id="live"></div>
+    </section>
+  </section>
+
+  <section id="detail-view" hidden>
+    <p><a class="back" href="#/">&larr; Back to the board</a></p>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<footer>
+  <p>Static page. It renders the sealed snapshot only - no live data, nothing fetched.
+    Implied values follow from the snapshot's own figures (TVL, seven-day change, tracking age,
+    category comparables); they are a model's reading of the record, not a promise of a launch.
+    Farm plans are written per protocol from its category, chains, size and age.</p>
+</footer>
+
+<script src="../dashboard-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
