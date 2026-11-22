@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseSnapshot, ageDays, type Snapshot } from './lib/snapshot.ts';
 import { exclusionReasons, isCandidate, recordsToken, type TypedProtocol } from './lib/universe.ts';
-import { fitOddsModel, fitValueModel, round6, VALUE_CAT_SHRINK, ODDS_CAT_SHRINK } from './lib/fit.ts';
+import { fitOddsModel, fitValueModel, round6, walkForward, VALUE_CAT_SHRINK, ODDS_CAT_SHRINK } from './lib/fit.ts';
 import { MODEL_VERSION } from './lib/model.ts';
 import { buildBoard, boardIssue, type BoardRow } from './lib/board.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
@@ -48,6 +48,7 @@ const snapshot: Snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
 const ages = snapshot.protocols.map((p) => ageDays(snapshot.as_of, p.listed_at));
 const valueFit = fitValueModel(snapshot.protocols, ages);
 const oddsFit = fitOddsModel(snapshot.protocols, ages);
+const wf = walkForward(snapshot.protocols, ages, snapshot.as_of);
 const board = buildBoard(snapshot, valueFit, oddsFit);
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
@@ -146,6 +147,15 @@ const modelFit = {
     loo_brier_no_category: round4(oddsFit.loo_brier_no_category),
     base_loo_brier: round4(oddsFit.base_loo_brier),
   },
+  walk_forward: {
+    protocol:
+      'expanding window over listing-date order (listed_at ascending, slug tiebreak; no listing date ordered as as_of minus 365 days); value: first train 64 peers, test blocks of 16; odds: first train 379 protocols, test blocks of 95, standardisation constants and base rate recomputed inside every training window',
+    value: { tested: wf.value.tested, ...looOut(wf.value) },
+    value_flat: { tested: wf.value_flat.tested, ...looOut(wf.value_flat) },
+    odds_brier: round4(wf.odds_brier),
+    odds_base_brier: round4(wf.odds_base_brier),
+    odds_tested: wf.odds_tested,
+  },
 };
 writeFileSync(join(out, 'model-fit.json'), `${JSON.stringify(modelFit)}\n`);
 
@@ -169,6 +179,10 @@ const evidence = {
   odds_base_rate: round4(oddsFit.base_rate),
   odds_loo_brier: round4(oddsFit.loo_brier),
   odds_base_loo_brier: round4(oddsFit.base_loo_brier),
+  value_wf_multiple: round2(Math.exp(wf.value.rmse)),
+  value_flat_wf_multiple: round2(Math.exp(wf.value_flat.rmse)),
+  odds_wf_brier: round4(wf.odds_brier),
+  odds_wf_base_brier: round4(wf.odds_base_brier),
 };
 
 // audit: every protocol in the snapshot, accounted for. Priced rows carry their
@@ -177,7 +191,7 @@ const evidence = {
 const rankBySlug = new Map(board.map((r) => [r.slug, r.rank]));
 const audit = typed.map((t) => {
   if (t.candidate) {
-    return { slug: t.slug, name: t.name, category: t.category, tvl_usd: t.tvl_usd, mcap_usd: t.mcap_usd, status: 'priced', note: `Board rank ${rankBySlug.get(t.slug)}` };
+    return { slug: t.slug, name: t.name, category: t.category, tvl_usd: t.tvl_usd, mcap_usd: t.mcap_usd, age_days: t.age_days, change_7d: t.change_7d, status: 'priced', note: `Board rank ${rankBySlug.get(t.slug)}` };
   }
   if (t.token_status === 'tokenised') {
     return {
@@ -186,11 +200,13 @@ const audit = typed.map((t) => {
       category: t.category,
       tvl_usd: t.tvl_usd,
       mcap_usd: t.mcap_usd,
+      age_days: t.age_days,
+      change_7d: t.change_7d,
       status: 'trading',
       note: t.mcap_usd !== null ? `Already trading, market cap $${Math.round(t.mcap_usd).toLocaleString('en-US')}` : 'Token recorded; no market cap in the snapshot',
     };
   }
-  return { slug: t.slug, name: t.name, category: t.category, tvl_usd: t.tvl_usd, mcap_usd: t.mcap_usd, status: 'excluded', note: `Set aside: ${t.exclusion_reasons.join('; ')}` };
+  return { slug: t.slug, name: t.name, category: t.category, tvl_usd: t.tvl_usd, mcap_usd: t.mcap_usd, age_days: t.age_days, change_7d: t.change_7d, status: 'excluded', note: `Set aside: ${t.exclusion_reasons.join('; ')}` };
 });
 const radarData = { as_of: snapshot.as_of, source: snapshot.source, floor_usd: snapshot.floor_usd, model: MODEL_VERSION, watchlist_size: snapshot.watchlist.length, board_size: board.length, rows: board, live, evidence, audit };
 writeFileSync(join(out, 'radar-data.json'), `${JSON.stringify(radarData)}\n`);
@@ -230,6 +246,7 @@ process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${candidates} launch candidates, ${board.length} board rows\n` +
     `token radar: value fit on ${valueFit.peers} traded peers, leave-one-out typical error x${Math.exp(valueFit.loo.rmse).toFixed(2)} against x${Math.exp(valueFit.flat_loo.rmse).toFixed(2)} for a flat multiple\n` +
     `token radar: odds fit on ${oddsFit.population} protocols, leave-one-out Brier ${oddsFit.loo_brier.toFixed(4)} against ${oddsFit.base_loo_brier.toFixed(4)} for the base rate\n` +
+    `token radar: walk-forward value typical error x${Math.exp(wf.value.rmse).toFixed(2)} against x${Math.exp(wf.value_flat.rmse).toFixed(2)} flat (${wf.value.tested} peers scored); walk-forward odds Brier ${wf.odds_brier.toFixed(4)} against ${wf.odds_base_brier.toFixed(4)} for the window base rate (${wf.odds_tested} scored)\n` +
     `token radar: wrote board.json, watchlist.csv, protocols-typed.json, model-fit.json, radar-data.json, dashboard-data.js to ${out}\n` +
     `token radar: ${dossierNote}\n`,
 );

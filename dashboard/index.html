@@ -13,7 +13,7 @@
       <p class="kicker">Token Launch Radar</p>
       <p class="plate-meta">Sealed snapshot &middot; DefiLlama protocols &middot; as of <span id="as-of">2026-11-14</span></p>
     </div>
-    <h1>Protocols with no token yet,<br>ranked by what a launch could be worth.</h1>
+    <h1>Protocols with no token yet,<br>ranked by expected value.</h1>
     <p class="standfirst">One sealed snapshot, priced by two models fitted on the snapshot itself:
       a launch value fitted on the protocols that already trade, and launch odds fitted on
       every protocol in the record. The board ranks by the product of the two.</p>
@@ -24,7 +24,11 @@
         out of sample: the value fit's leave-one-out typical error is &times;<span id="ev-value">8.25</span> against
         &times;<span id="ev-flat">10.07</span> for a flat multiple, on <span id="ev-peers">128</span> traded peers; the odds fit's
         leave-one-out Brier score is <span id="ev-brier">0.2088</span> against <span id="ev-base">0.2483</span> for the base
-        rate, on all <span id="ev-pop">758</span> protocols. Open any row for its working.</span>
+        rate, on all <span id="ev-pop">758</span> protocols. Walk-forward on listing-date order
+        (fit on the earlier listings, score the later ones): value &times;<span id="ev-wf">10.25</span>
+        against &times;<span id="ev-wf-flat">12.58</span> for the flat multiple; odds Brier
+        <span id="ev-wf-brier">0.2462</span> against <span id="ev-wf-base">0.2746</span> for the
+        window base rate. Open any row for its working.</span>
     </p>
   </div>
 </header>
@@ -47,8 +51,19 @@
       <label class="ctl ctl-check">
         <input id="floor-only" type="checkbox"> Above the $50M floor
       </label>
+      <label class="ctl">Min TVL $
+        <input id="min-tvl" type="number" min="0" step="1000000" placeholder="any">
+      </label>
       <p class="count" id="count"></p>
+      <p class="count" id="triage"></p>
     </div>
+
+    <section class="tray" id="tray" hidden>
+      <h2>Compare</h2>
+      <p class="tray-note">Pinned side by side, each with its model working. Pin up to three
+        protocols from the board; pinning a fourth replaces the first.</p>
+      <div class="tray-grid" id="tray-grid"></div>
+    </section>
 
     <table class="board" id="board">
       <thead>
@@ -61,13 +76,44 @@
           <th data-sort="change" class="num sortable">7d %</th>
           <th data-sort="age" class="num sortable">Age</th>
           <th data-sort="value" class="num sortable">Fitted value</th>
+          <th data-sort="multiple" class="num sortable">Multiple</th>
           <th data-sort="odds" class="num sortable">Launch odds</th>
           <th data-sort="implied" class="num sortable">Expected value</th>
+          <th data-sort="gasrate" class="num sortable">Gas / $1k EV</th>
+          <th data-sort="tier" class="sortable">Triage</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
     </table>
     <p class="empty" id="empty" hidden>No protocol matches those filters. Loosen one and the board comes back.</p>
+    <p class="board-note">The multiple is the fitted value over TVL. Gas per $1,000 of expected value is the
+      farm plan's own gas figure against the row's expected value. Farm triage: farm = fitted odds at
+      least 30% and gas at most $0.05 per $1,000 of expected value; thin = odds between 15% and 30%, or
+      gas above that line; skip = odds under 15%.</p>
+
+    <section class="refit">
+      <h2>Refit the models on this page</h2>
+      <p class="refit-note">Both models are refitted here, in your browser, from the audit data on
+        this page - the same arithmetic the pipeline runs, term for term. At the shipped settings
+        the refit must reproduce the board figure for figure, and the check below says whether it
+        does. Move a setting and the board reprices under the refit; each row's detail view still
+        replays the shipped fit.</p>
+      <div class="refit-controls">
+        <label class="ctl">Value category shrink
+          <input id="rf-vshrink" type="range" min="0" max="60" step="1" value="20">
+          <span class="rf-val" id="rf-vshrink-v">20</span>
+        </label>
+        <label class="ctl">Odds category shrink
+          <input id="rf-oshrink" type="range" min="0" max="40" step="1" value="10">
+          <span class="rf-val" id="rf-oshrink-v">10</span>
+        </label>
+        <label class="ctl ctl-check"><input id="rf-vcat" type="checkbox" checked> Value category offsets</label>
+        <label class="ctl ctl-check"><input id="rf-ocat" type="checkbox" checked> Odds category offsets</label>
+        <label class="ctl ctl-check"><input id="rf-flat" type="checkbox"> Flat multiple for value</label>
+        <button type="button" id="rf-reset" class="rf-reset">Reset to the shipped fit</button>
+      </div>
+      <p class="refit-check" id="refit-check">Refit check: running.</p>
+    </section>
 
     <section class="live">
       <h2>Already trading</h2>

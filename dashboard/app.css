@@ -90,12 +90,14 @@ main { max-width: 1360px; margin: 0 auto; padding: 8px 40px 24px; }
   font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase;
 }
 .ctl-search { flex: 1 1 220px; }
-.ctl input[type="search"], .ctl select {
+.ctl input[type="search"], .ctl input[type="number"], .ctl select {
   background: transparent; color: var(--ink);
   border: 1px solid var(--faint); border-radius: 0;
   padding: 6px 8px; font-size: 14px; font-family: inherit;
   text-transform: none; letter-spacing: normal; font-weight: 400;
 }
+.ctl input[type="number"] { width: 118px; }
+.ctl input[type="range"] { accent-color: var(--red); width: 120px; }
 .ctl-search input { flex: 1; }
 .ctl input[type="search"]:focus, .ctl select:focus { outline: 1px solid var(--ink); outline-offset: 0; }
 .ctl-check { align-items: center; text-transform: none; font-size: 13.5px; font-weight: 400; color: var(--ink); letter-spacing: normal; }
@@ -103,20 +105,20 @@ main { max-width: 1360px; margin: 0 auto; padding: 8px 40px 24px; }
 .count { margin: 0 0 0 auto; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
 
 table.board { width: 100%; border-collapse: collapse; }
-.board th, .board td { padding: 7px 10px; text-align: left; vertical-align: baseline; }
+.board th, .board td { padding: 7px 6px; text-align: left; vertical-align: baseline; }
 .board thead th {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; white-space: nowrap;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; white-space: nowrap;
   color: var(--muted); border-bottom: 2px solid var(--ink); padding-top: 10px; padding-bottom: 8px;
 }
 .board tbody td { border-bottom: 1px solid var(--line-soft); }
 .board tbody tr { cursor: pointer; }
 .board tbody tr:hover { background: var(--paper-dim); }
-.board th.num, .board td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; }
+.board th.num, .board td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
 .board tbody td:first-child {
   font-family: Georgia, "Times New Roman", serif; font-size: 21px; line-height: 1;
-  color: var(--red); text-align: right; padding-right: 16px;
+  color: var(--red); text-align: right; padding-right: 10px;
 }
-.board td.name { font-family: Georgia, "Times New Roman", serif; font-size: 16.5px; font-weight: 600; }
+.board td.name { font-family: Georgia, "Times New Roman", serif; font-size: 15.5px; font-weight: 600; }
 .board td.name .slug { display: block; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 400; color: var(--faint); font-size: 11px; margin-top: 1px; }
 .wl {
   display: inline-block; margin-left: 8px; padding: 1px 5px;
@@ -232,6 +234,65 @@ table.working tr.subtotal .wval { font-weight: 700; font-size: 15px; }
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px;
 }
 
+/* ---------- Board additions: pins, triage, compare, refit ---------- */
+
+.board td.tier {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+}
+.board td.tier-farm { color: var(--red); }
+.board td.tier-thin { color: var(--ink-soft); }
+.board td.tier-skip { color: var(--faint); }
+.pin, .unpin {
+  display: block; margin-top: 4px; padding: 2px 7px;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--faint); border-radius: 0;
+  font-family: inherit; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+}
+.pin:hover, .unpin:hover { color: var(--ink); border-color: var(--ink); }
+.pin.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.board-note { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; max-width: 110ch; }
+
+.tray { margin-top: 32px; }
+.tray h2, .refit h2 {
+  font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 600;
+  margin: 0 0 8px; padding-top: 16px; border-top: 4px solid var(--ink);
+}
+.tray-note, .refit-note { color: var(--ink-soft); max-width: 76ch; margin: 0 0 8px; }
+.tray-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 32px; border-top: 2px solid var(--ink); }
+.tray-card { padding: 12px 0 16px; border-bottom: 1px solid var(--line); }
+.tray-card h3 {
+  margin: 0 0 2px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 600;
+}
+.tray-card .unpin { margin-top: 0; flex: none; }
+.tray-card .lcat { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+.tray-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; margin: 0 0 10px; }
+.tray-card dt { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; margin-bottom: 2px; }
+.tray-card dd { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; }
+.tray-work {
+  margin: 0; color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.65;
+}
+
+.refit { margin-top: 48px; }
+.refit-controls {
+  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
+  padding: 12px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line);
+}
+.rf-val { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink); min-width: 2ch; }
+.rf-reset {
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--faint); border-radius: 0;
+  padding: 6px 12px; font-family: inherit; font-size: 12.5px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+}
+.rf-reset:hover { border-color: var(--ink); }
+.refit-check {
+  margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+}
+
 /* ---------- Colophon ---------- */
 
 footer { max-width: 1360px; margin: 0 auto; padding: 16px 40px 32px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--ink); }
@@ -245,4 +306,5 @@ footer p { max-width: 82ch; margin: 0; }
   .detail-grid { grid-template-columns: 1fr; }
   .live-card { flex-wrap: wrap; }
   .live-card h3 { flex-basis: 100%; }
+  .tray-grid { grid-template-columns: 1fr; }
 }

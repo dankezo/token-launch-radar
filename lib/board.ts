@@ -54,7 +54,7 @@ export function buildBoard(snapshot: Snapshot, vf: ValueFit, of: OddsFit): Board
       (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0),
   );
   return priced.map(({ p, age, parts }, i) => {
-    const plan = farmPlan(p, age, parts.expected_value_usd);
+    const plan = farmPlan(p, age, parts.expected_value_usd, parts.launch_odds);
     return {
       rank: i + 1,
       slug: p.slug,

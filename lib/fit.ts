@@ -16,6 +16,13 @@
 // per-category logit offset (the category launch rate, shrunk toward the
 // base rate with 10 phantom protocols). Scored by leave-one-out Brier score
 // against the leave-one-out base rate.
+//
+// Both models are also scored walk-forward (a time split, not a random one):
+// protocols are ordered by listing date and each model is refitted on an
+// expanding window of earlier listings, then scored on the next block of
+// later ones. On a cross-sectional snapshot this is a robustness angle, not
+// a forecast test: it asks whether the fit survives being trained on the
+// past of the record and applied to its future.
 
 import type { SnapshotProtocol } from './snapshot.ts';
 import { recordsToken } from './universe.ts';
@@ -317,5 +324,115 @@ export function fitOddsModel(records: SnapshotProtocol[], ages: (number | null)[
     loo_brier: brier / n,
     loo_brier_no_category: brierNoCat / n,
     base_loo_brier: baseBrier / n,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Walk-forward (time-split) validation. The protocol is fixed: order by
+// listed_at ascending with a slug tiebreak, protocols with no listing date
+// ordered as if listed 365 days before the snapshot date; fit on an
+// expanding window of the earliest listings; score the next block; repeat.
+// Value: first train 64 peers, test blocks of 16 (64 peers scored). Odds:
+// first train 379 protocols, test blocks of 95 (379 scored), with the
+// standardisation constants and the base rate recomputed inside every
+// training window, so nothing from a test block leaks into its own fit.
+// ---------------------------------------------------------------------------
+
+export interface WalkForwardResult {
+  value: LogErrorStats & { tested: number };
+  value_flat: LogErrorStats & { tested: number };
+  odds_brier: number;
+  odds_base_brier: number;
+  odds_tested: number;
+}
+
+export function walkForward(
+  records: SnapshotProtocol[],
+  ages: (number | null)[],
+  asOf: string,
+): WalkForwardResult {
+  const DAY_MS = 86_400_000;
+  const asOfMs = Date.parse(`${asOf}T00:00:00Z`);
+  const orderKeyMs = records.map((p) =>
+    p.listed_at === null ? asOfMs - 365 * DAY_MS : Date.parse(`${p.listed_at}T00:00:00Z`),
+  );
+  const byDateSlug = (ia: number, ib: number): number =>
+    orderKeyMs[ia] - orderKeyMs[ib] || (records[ia].slug < records[ib].slug ? -1 : 1);
+
+  // Value model, shipped form and flat baseline, on the traded peers.
+  const peerIdx = records
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => recordsToken(p) && (p.mcap_usd ?? 0) > 0 && p.tvl_usd > 0)
+    .map(({ i }) => i);
+  const peers = peerIdx.map((i) => records[i]);
+  const peerAges = peerIdx.map((i) => ages[i]);
+  const y = peers.map((p) => Math.log(p.mcap_usd as number));
+  const ratios = peers.map((p) => clampNum((p.mcap_usd as number) / p.tvl_usd, 0.01, 2));
+  const order = peers.map((_, j) => j).sort((a, b) => byDateSlug(peerIdx[a], peerIdx[b]));
+  const errs: number[] = [];
+  const flatErrs: number[] = [];
+  for (let start = 64; start < peers.length; start += 16) {
+    const train = order.slice(0, start);
+    const test = order.slice(start, Math.min(start + 16, peers.length));
+    const beta = ols(train.map((j) => valueRow(peers[j])), train.map((j) => y[j]));
+    if (!beta) throw new Error('walk-forward value fit failed');
+    const off = shrunkResidualOffsets(train, peers, peerAges, y, (p) => valueRow(p), beta, VALUE_CAT_SHRINK);
+    const flatMult = median(train.map((j) => ratios[j]));
+    for (const i of test) {
+      errs.push(y[i] - (dot(valueRow(peers[i]), beta) + (off.get(catKey(peers[i])) ?? 0)));
+      flatErrs.push(y[i] - Math.log(flatMult * peers[i].tvl_usd));
+    }
+  }
+
+  // Odds model, shipped form and the window base rate, on all protocols.
+  const launched = records.map(recordsToken);
+  const yo = launched.map((v) => (v ? 1 : 0));
+  const logTvl = records.map((p) => Math.log(p.tvl_usd));
+  const ageYears = ages.map((a) => Math.min(a ?? 365, ODDS_AGE_CAP_DAYS) / 365);
+  const growth = records.map(growthFrac);
+  const allOrder = records.map((_, i) => i).sort(byDateSlug);
+  let sq = 0;
+  let baseSq = 0;
+  let tested = 0;
+  for (let start = 379; start < records.length; start += 95) {
+    const train = allOrder.slice(0, start);
+    const test = allOrder.slice(start, Math.min(start + 95, records.length));
+    const zxT = zscore(train.map((i) => logTvl[i]));
+    const zaT = zscore(train.map((i) => ageYears[i]));
+    const zgT = zscore(train.map((i) => growth[i]));
+    const rowT = (i: number): number[] => [
+      1,
+      (logTvl[i] - zxT.mean) / zxT.sd,
+      (ageYears[i] - zaT.mean) / zaT.sd,
+      (growth[i] - zgT.mean) / zgT.sd,
+    ];
+    const rate = train.reduce((s, i) => s + yo[i], 0) / train.length;
+    const baseLogit = Math.log(rate / (1 - rate));
+    const cnt = new Map<string, number>();
+    const hit = new Map<string, number>();
+    for (const i of train) {
+      const key = catKey(records[i]);
+      cnt.set(key, (cnt.get(key) ?? 0) + 1);
+      hit.set(key, (hit.get(key) ?? 0) + yo[i]);
+    }
+    const offs = new Map([...cnt].map(([c, count]) => {
+      const pr = ((hit.get(c) ?? 0) + ODDS_CAT_SHRINK * rate) / (count + ODDS_CAT_SHRINK);
+      return [c, Math.log(pr / (1 - pr)) - baseLogit] as [string, number];
+    }));
+    const beta = logitFit(train.map(rowT), train.map((i) => yo[i]));
+    if (!beta) throw new Error('walk-forward odds fit failed');
+    for (const i of test) {
+      sq += (sigmoid(dot(rowT(i), beta) + (offs.get(catKey(records[i])) ?? 0)) - yo[i]) ** 2;
+      baseSq += (rate - yo[i]) ** 2;
+      tested++;
+    }
+  }
+
+  return {
+    value: { ...logErrorStats(errs), tested: errs.length },
+    value_flat: { ...logErrorStats(flatErrs), tested: flatErrs.length },
+    odds_brier: sq / tested,
+    odds_base_brier: baseSq / tested,
+    odds_tested: tested,
   };
 }
