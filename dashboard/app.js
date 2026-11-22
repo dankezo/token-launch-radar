@@ -1,7 +1,8 @@
 // Token Launch Radar dashboard. Renders window.RADAR_DATA (written next to this
 // folder by the pipeline as dashboard-data.js, the same figures board.json
-// carries) as a sortable, filterable board with a per-protocol detail view.
-// No imports, no fetching: the page works on the sealed snapshot alone.
+// carries) as a sortable, filterable board with a per-protocol detail view and
+// a full audit of the snapshot. No imports, no fetching: the page works on the
+// sealed snapshot alone.
 
 (function () {
   'use strict';
@@ -15,8 +16,11 @@
   var rows = data.rows;
   var bySlug = {};
   rows.forEach(function (r) { bySlug[r.slug] = r; });
+  var ev = data.evidence || {};
+  var audit = data.audit || [];
 
   var state = { q: '', cat: '', chain: '', watchOnly: false, floorOnly: false, sortKey: 'rank', sortDir: 1 };
+  var auditState = { q: '', status: 'all' };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -36,6 +40,8 @@
     if (days < 365) return days + 'd';
     return (days / 365).toFixed(1).replace(/\.0$/, '') + 'y (' + commas(days) + 'd)';
   }
+  function pct(odds) { return (odds * 100).toFixed(1) + '%'; }
+  function signed6(n) { return (n < 0 ? '' : '+') + n.toFixed(6); }
   function changeCell(r) {
     if (r.change_7d == null) return '<span class="flat">n/r</span>';
     var cls = r.change_7d > 0 ? 'up' : r.change_7d < 0 ? 'down' : 'flat';
@@ -43,15 +49,23 @@
     return '<span class="' + cls + '">' + sign + r.change_7d.toFixed(2) + '%</span>';
   }
 
-  // Header stats and model line.
+  // Header stats, model line and the published out-of-sample evidence.
   document.getElementById('as-of').textContent = data.as_of;
   document.getElementById('model-id').textContent = data.model;
+  if (ev.value_loo_multiple != null) {
+    document.getElementById('ev-value').textContent = ev.value_loo_multiple.toFixed(2);
+    document.getElementById('ev-flat').textContent = ev.flat_loo_multiple.toFixed(2);
+    document.getElementById('ev-peers').textContent = ev.value_peers;
+    document.getElementById('ev-brier').textContent = ev.odds_loo_brier.toFixed(4);
+    document.getElementById('ev-base').textContent = ev.odds_base_loo_brier.toFixed(4);
+    document.getElementById('ev-pop').textContent = ev.odds_population;
+  }
   var stats = [
     ['Pre-token, ranked', rows.length],
     ['House watchlist', data.watchlist_size],
     ['Watchlist floor', compact(data.floor_usd)],
-    ['Snapshot protocols', '758'],
-    ['Board total, implied', compact(rows.reduce(function (a, r) { return a + r.implied_value_usd; }, 0))],
+    ['Snapshot protocols', audit.length || 758],
+    ['Board total, expected', compact(rows.reduce(function (a, r) { return a + r.implied_value_usd; }, 0))],
   ];
   document.getElementById('stats').innerHTML = stats.map(function (s) {
     return '<div><dt>' + esc(s[0]) + '</dt><dd>' + esc(s[1]) + '</dd></div>';
@@ -91,7 +105,8 @@
       tvl: function (r) { return r.tvl_usd; },
       change: function (r) { return r.change_7d == null ? -Infinity : r.change_7d; },
       age: function (r) { return r.age_days == null ? -1 : r.age_days; },
-      multiple: function (r) { return r.multiple; },
+      value: function (r) { return r.fitted_value_usd; },
+      odds: function (r) { return r.launch_odds; },
       implied: function (r) { return r.implied_value_usd; },
     }[key];
     out.sort(function (a, b) {
@@ -118,7 +133,8 @@
         '<td class="num">' + compact(r.tvl_usd) + '</td>' +
         '<td class="num">' + changeCell(r) + '</td>' +
         '<td class="num">' + ageText(r.age_days) + '</td>' +
-        '<td class="num">' + r.multiple.toFixed(3) + '</td>' +
+        '<td class="num">' + compact(r.fitted_value_usd) + '</td>' +
+        '<td class="num">' + pct(r.launch_odds) + '</td>' +
         '<td class="num implied">' + compact(r.implied_value_usd) + '</td></tr>';
     }).join('');
     document.querySelectorAll('#board thead th.sortable').forEach(function (th) {
@@ -136,16 +152,53 @@
       '<div><dt>TVL</dt><dd>' + compact(p.tvl_usd) + '</dd></div></dl></article>';
   }).join('');
 
+  // The audit: every protocol in the snapshot, with its disposition.
+  var auditCounts = { priced: 0, trading: 0, excluded: 0 };
+  audit.forEach(function (a) { if (auditCounts[a.status] != null) auditCounts[a.status]++; });
+  document.getElementById('audit-total').textContent = audit.length;
+  document.getElementById('audit-counts').textContent =
+    auditCounts.priced + ' priced on the board, ' + auditCounts.trading + ' already trading, ' + auditCounts.excluded + ' set aside';
+  var statusWord = { priced: 'Priced', trading: 'Already trading', excluded: 'Set aside' };
+  function renderAudit() {
+    var q = auditState.q.trim().toLowerCase();
+    var list = audit.filter(function (a) {
+      if (auditState.status !== 'all' && a.status !== auditState.status) return false;
+      if (q && a.name.toLowerCase().indexOf(q) < 0 && a.slug.indexOf(q) < 0) return false;
+      return true;
+    });
+    list.sort(function (a, b) { return b.tvl_usd - a.tvl_usd || (a.slug < b.slug ? -1 : 1); });
+    document.getElementById('audit-count').textContent = 'Showing ' + list.length + ' of ' + audit.length + ' protocols';
+    document.getElementById('audit-empty').hidden = list.length > 0;
+    document.getElementById('audit-rows').innerHTML = list.map(function (a) {
+      var linked = a.status === 'priced' && bySlug[a.slug];
+      return '<tr' + (linked ? ' data-slug="' + esc(a.slug) + '" class="linked"' : '') + '>' +
+        '<td class="aname">' + esc(a.name) + '<span class="slug">' + esc(a.slug) + '</span></td>' +
+        '<td class="cat">' + esc(a.category || 'Uncategorised') + '</td>' +
+        '<td class="num">' + compact(a.tvl_usd) + '</td>' +
+        '<td class="status status-' + esc(a.status) + '">' + esc(statusWord[a.status] || a.status) + '</td>' +
+        '<td class="note">' + esc(a.note) + '</td></tr>';
+    }).join('');
+  }
+
   function detail(r) {
-    var s1 = r.multiple * r.tvl_usd;
-    var s2 = s1 * r.scale_factor;
-    var s3 = s2 * r.growth_factor;
-    var stages = [
-      ['Category multiple (' + esc(r.category || 'Uncategorised') + ', market cap per $1 of TVL among tokenised peers)', r.multiple.toFixed(6)],
-      ['x TVL', money(s1)],
-      ['x scale ' + r.scale_factor.toFixed(6) + ' (TVL^0.85: size counts, at a discount)', money(s2)],
-      ['x growth ' + r.growth_factor.toFixed(6) + ' (7d TVL change ' + (r.change_7d == null ? 'not reported, counted as flat' : r.change_7d.toFixed(2) + '%') + ', at half weight)', money(s3)],
-      ['x maturity ' + r.maturity_factor.toFixed(6) + ' (' + (r.age_days == null ? 'age unknown, priced at 365 days' : commas(r.age_days) + ' days tracked with no token') + ')', money(Math.round(s3 * r.maturity_factor))],
+    var vp = r.value_log_parts;
+    var lp = r.logit_parts;
+    var coef = vp.size / Math.log(r.tvl_usd);
+    var logSum = vp.intercept + vp.size + vp.category;
+    var logitSum = lp.intercept + lp.size + lp.age + lp.growth + lp.category;
+    var valueStages = [
+      ['Intercept, fitted on the ' + (ev.value_peers || 128) + ' traded peers that carry a market cap', vp.intercept.toFixed(6)],
+      ['+ size: ' + coef.toFixed(4) + ' x ln TVL (TVL ' + money(r.tvl_usd) + ') - the fitted size curve: value grows with TVL, at a discount', signed6(vp.size)],
+      ['+ category offset (' + esc(r.category || 'Uncategorised') + ': how its traded peers sit against the curve, shrunk toward it)', signed6(vp.category)],
+      ['ln fitted value, the sum of the three', logSum.toFixed(6)],
+    ];
+    var oddsStages = [
+      ['Intercept, fitted on all ' + (ev.odds_population || 758) + ' protocols (base launch rate ' + (ev.odds_base_rate != null ? (ev.odds_base_rate * 100).toFixed(1) : '54.9') + '%)', lp.intercept.toFixed(6)],
+      ['+ size term (standardised ln TVL)', signed6(lp.size)],
+      ['+ age term (standardised age: the longer a protocol has run, the likelier a launch)', signed6(lp.age)],
+      ['+ growth term (standardised seven-day TVL change ' + (r.change_7d == null ? 'not reported, counted as flat' : r.change_7d.toFixed(2) + '%') + ')', signed6(lp.growth)],
+      ['+ category offset (' + esc(r.category || 'Uncategorised') + ': its launch rate against the base rate, shrunk toward it)', signed6(lp.category)],
+      ['Logit, the sum of the five', logitSum.toFixed(6)],
     ];
     var facts = [
       ['Rank', '#' + r.rank + ' of ' + rows.length],
@@ -157,17 +210,33 @@
       ['Tracked since', r.listed_at || 'not recorded'],
       ['Age at snapshot', r.age_days == null ? 'unknown' : commas(r.age_days) + ' days'],
     ];
+    var hours = Math.round((r.farm_minutes / 60) * 10) / 10;
     return '<div class="detail-head"><h2>' + esc(r.name) + (r.on_watchlist ? '<span class="wl">WL</span>' : '') + '</h2>' +
-      '<p class="dsub">' + esc(r.slug) + ' - pre-token on the snapshot of ' + esc(data.as_of) + '. Implied value ' +
-      '<strong>' + money(r.implied_value_usd) + '</strong> under the stated model.</p></div>' +
+      '<p class="dsub">' + esc(r.slug) + ' - pre-token on the snapshot of ' + esc(data.as_of) + '. Fitted launch value ' +
+      '<strong>' + money(r.fitted_value_usd) + '</strong> at fitted launch odds of <strong>' + pct(r.launch_odds) + '</strong>' +
+      ' gives the expected value the board ranks by: <strong>' + money(r.implied_value_usd) + '</strong>.</p></div>' +
       '<div class="detail-grid"><section class="card"><h3>The record</h3><dl class="facts">' +
       facts.map(function (f) { return '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>'; }).join('') +
       '</dl></section>' +
-      '<section class="card"><h3>The working</h3><table class="working">' +
-      stages.map(function (s) { return '<tr><td class="wlabel">' + s[0] + '</td><td class="wval">' + s[1] + '</td></tr>'; }).join('') +
-      '<tr class="total"><td class="wlabel">Implied value, as ranked on the board</td><td class="wval">' + money(r.implied_value_usd) + '</td></tr>' +
-      '</table></section></div>' +
-      '<section class="card"><h3>The farm plan</h3><ol class="farm">' +
+      '<section class="card"><h3>The working</h3>' +
+      '<p class="work-sub">Fitted launch value (log scale)</p><table class="working">' +
+      valueStages.map(function (s) { return '<tr><td class="wlabel">' + s[0] + '</td><td class="wval">' + s[1] + '</td></tr>'; }).join('') +
+      '<tr class="subtotal"><td class="wlabel">Fitted launch value, exp of the sum</td><td class="wval">' + money(r.fitted_value_usd) + '</td></tr>' +
+      '</table>' +
+      '<p class="work-sub">Fitted launch odds (logit scale)</p><table class="working">' +
+      oddsStages.map(function (s) { return '<tr><td class="wlabel">' + s[0] + '</td><td class="wval">' + s[1] + '</td></tr>'; }).join('') +
+      '<tr class="subtotal"><td class="wlabel">Launch odds, sigmoid of the sum</td><td class="wval">' + pct(r.launch_odds) + '</td></tr>' +
+      '</table>' +
+      '<table class="working"><tr class="total"><td class="wlabel">Expected value, as ranked on the board</td><td class="wval">' + money(r.implied_value_usd) + '</td></tr></table>' +
+      '<p class="work-note">Out of sample, the value fit\'s leave-one-out typical error is &times;' + (ev.value_loo_multiple != null ? ev.value_loo_multiple.toFixed(2) : '8.25') +
+      ' against &times;' + (ev.flat_loo_multiple != null ? ev.flat_loo_multiple.toFixed(2) : '10.07') + ' for a flat multiple, and the odds fit\'s leave-one-out Brier score is ' +
+      (ev.odds_loo_brier != null ? ev.odds_loo_brier.toFixed(4) : '0.2088') + ' against ' + (ev.odds_base_loo_brier != null ? ev.odds_base_loo_brier.toFixed(4) : '0.2483') +
+      ' for the base rate. The working above is the board\'s arithmetic, replayed.</p>' +
+      '</section></div>' +
+      '<section class="card"><h3>The farm plan</h3>' +
+      '<p class="netting">Plan netting: about $' + (Math.round(r.farm_gas_usd * 100) / 100) + ' of gas and about ' + hours +
+      ' hours of work (' + commas(r.farm_minutes) + ' minutes) across the hold, against ' + money(r.implied_value_usd) +
+      ' of expected value at stake on the model.</p><ol class="farm">' +
       r.farm_steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
       '</ol></section>';
   }
@@ -203,8 +272,24 @@
     var tr = e.target.closest('tr[data-slug]');
     if (tr) location.hash = '#/protocol/' + encodeURIComponent(tr.getAttribute('data-slug'));
   });
+  document.getElementById('audit-seg').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-status]');
+    if (!b) return;
+    auditState.status = b.getAttribute('data-status');
+    document.querySelectorAll('#audit-seg button').forEach(function (x) {
+      x.classList.toggle('on', x === b);
+    });
+    renderAudit();
+  });
+  document.getElementById('audit-q').addEventListener('input', function (e) { auditState.q = e.target.value; renderAudit(); });
+  document.getElementById('audit-rows').addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-slug]');
+    if (tr) location.hash = '#/protocol/' + encodeURIComponent(tr.getAttribute('data-slug'));
+  });
   window.addEventListener('hashchange', route);
 
   renderBoard();
+  renderAudit();
   route();
 })();
+

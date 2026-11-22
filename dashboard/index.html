@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar - pre-token protocols ranked by implied value</title>
+<title>Token Launch Radar - pre-token protocols ranked by expected value</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -14,12 +14,17 @@
       <p class="plate-meta">Sealed snapshot &middot; DefiLlama protocols &middot; as of <span id="as-of">2026-11-14</span></p>
     </div>
     <h1>Protocols with no token yet,<br>ranked by what a launch could be worth.</h1>
-    <p class="standfirst">One sealed snapshot, priced by one stated model. Every pre-token protocol
-      the record supports, ranked; those already trading are kept apart, at the market's own values.</p>
+    <p class="standfirst">One sealed snapshot, priced by two models fitted on the snapshot itself:
+      a launch value fitted on the protocols that already trade, and launch odds fitted on
+      every protocol in the record. The board ranks by the product of the two.</p>
     <dl class="stats" id="stats"></dl>
     <p class="formula"><span class="formula-label">The model</span>
-      <span class="formula-body">implied value = category multiple &times; TVL &times; scale &times; growth &times; maturity</span>
-      <span class="formula-note">model <span id="model-id">radar-comps-1</span> - Category Comps with Sublinear TVL. Open any row for its working.</span>
+      <span class="formula-body">expected value = fitted launch value &times; fitted launch odds</span>
+      <span class="formula-note">model <span id="model-id">radar-fit-2</span> - fitted, not set by hand, and scored
+        out of sample: the value fit's leave-one-out typical error is &times;<span id="ev-value">8.25</span> against
+        &times;<span id="ev-flat">10.07</span> for a flat multiple, on <span id="ev-peers">128</span> traded peers; the odds fit's
+        leave-one-out Brier score is <span id="ev-brier">0.2088</span> against <span id="ev-base">0.2483</span> for the base
+        rate, on all <span id="ev-pop">758</span> protocols. Open any row for its working.</span>
     </p>
   </div>
 </header>
@@ -55,8 +60,9 @@
           <th data-sort="tvl" class="num sortable">TVL</th>
           <th data-sort="change" class="num sortable">7d %</th>
           <th data-sort="age" class="num sortable">Age</th>
-          <th data-sort="multiple" class="num sortable">Multiple</th>
-          <th data-sort="implied" class="num sortable">Implied value</th>
+          <th data-sort="value" class="num sortable">Fitted value</th>
+          <th data-sort="odds" class="num sortable">Launch odds</th>
+          <th data-sort="implied" class="num sortable">Expected value</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -66,8 +72,35 @@
     <section class="live">
       <h2>Already trading</h2>
       <p class="live-note">The snapshot's tokenised protocols are not ranked by the model. The largest by
-        market cap, at the market's own values - the comparables the category multiples are built from.</p>
+        market cap, at the market's own values - the traded peers the launch-value fit is built from.</p>
       <div class="live-grid" id="live"></div>
+    </section>
+
+    <section class="audit">
+      <h2>The audit: every protocol accounted for</h2>
+      <p class="audit-note">The board above is the house screen's 198 launch candidates. The snapshot holds
+        <span id="audit-total">758</span> protocols, and every one of them is accounted for here:
+        <span id="audit-counts">198 priced on the board, 416 already trading, 144 set aside</span> by the
+        screen's own rules, each with its reason stated. Nothing was dropped in silence.</p>
+      <div class="controls audit-controls">
+        <div class="seg" id="audit-seg">
+          <button type="button" data-status="all" class="on">All</button>
+          <button type="button" data-status="priced">Priced</button>
+          <button type="button" data-status="trading">Already trading</button>
+          <button type="button" data-status="excluded">Set aside</button>
+        </div>
+        <label class="ctl ctl-search">Search
+          <input id="audit-q" type="search" placeholder="name or slug" autocomplete="off">
+        </label>
+        <p class="count" id="audit-count"></p>
+      </div>
+      <table class="audit-table">
+        <thead>
+          <tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th>Status</th><th>Note</th></tr>
+        </thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+      <p class="empty" id="audit-empty" hidden>No protocol matches that search.</p>
     </section>
   </section>
 
@@ -79,9 +112,10 @@
 
 <footer>
   <p>Static page. It renders the sealed snapshot only - no live data, nothing fetched.
-    Implied values follow from the snapshot's own figures (TVL, seven-day change, tracking age,
-    category comparables); they are a model's reading of the record, not a promise of a launch.
-    Farm plans are written per protocol from its category, chains, size and age.</p>
+    Both models are fitted on the snapshot's own figures (TVL, seven-day change, tracking age,
+    category, and which protocols already record a token); expected values are a fitted model's
+    reading of the record, not a promise of a launch. Farm plans are written per protocol from
+    its category, chains, size and age, and netted against its expected value.</p>
 </footer>
 
 <script src="../dashboard-data.js"></script>

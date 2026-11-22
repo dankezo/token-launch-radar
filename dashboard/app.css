@@ -3,7 +3,7 @@
    hairline rules instead of boxes, no radius, no gradients, no shadows.
    Type roles: Georgia serif for the nameplate, protocol names and ranks;
    a grotesk for the interface; monospace strictly for figures and metadata.
-   One accent: a deep signal red, spent only on rank numerals, the implied
+   One accent: a deep signal red, spent only on rank numerals, the expected
    value column and the few marks that must catch the eye. Spacing in 8px
    steps throughout. */
 
@@ -178,6 +178,59 @@ table.working tr.total .wval { color: var(--red); font-weight: 700; font-size: 1
 .farm { margin: 0; padding-left: 26px; }
 .farm li { margin-bottom: 14px; line-height: 1.6; padding-left: 6px; }
 .farm li::marker { font-family: Georgia, "Times New Roman", serif; color: var(--red); font-weight: 700; font-size: 17px; }
+
+/* ---------- The audit: the whole snapshot, accounted for ---------- */
+
+.audit { margin-top: 48px; }
+.audit h2 {
+  font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 600;
+  margin: 0 0 8px; padding-top: 16px; border-top: 4px solid var(--ink);
+}
+.audit-note { color: var(--ink-soft); max-width: 76ch; margin: 0 0 8px; }
+.audit-controls { border-bottom: 2px solid var(--ink); }
+.seg { display: flex; gap: 0; }
+.seg button {
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--faint); border-radius: 0; border-left: none;
+  padding: 6px 12px; font-family: inherit; font-size: 12.5px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+}
+.seg button:first-child { border-left: 1px solid var(--faint); }
+.seg button:hover { color: var(--ink); }
+.seg button.on { background: var(--ink); color: var(--paper); }
+table.audit-table { width: 100%; border-collapse: collapse; }
+.audit-table th, .audit-table td { padding: 6px 10px; text-align: left; vertical-align: baseline; }
+.audit-table thead th {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; white-space: nowrap;
+  color: var(--muted); border-bottom: 2px solid var(--ink); padding-top: 10px; padding-bottom: 8px;
+}
+.audit-table tbody td { border-bottom: 1px solid var(--line-soft); }
+.audit-table th.num, .audit-table td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+.audit-table td.aname { font-family: Georgia, "Times New Roman", serif; font-size: 15px; font-weight: 600; }
+.audit-table td.aname .slug { display: block; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 400; color: var(--faint); font-size: 11px; margin-top: 1px; }
+.audit-table td.cat { color: var(--ink-soft); font-size: 13px; }
+.audit-table td.status { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+.audit-table td.status-priced { color: var(--red); }
+.audit-table td.note { color: var(--ink-soft); font-size: 13px; }
+.audit-table tbody tr.linked { cursor: pointer; }
+.audit-table tbody tr.linked:hover { background: var(--paper-dim); }
+
+/* ---------- Detail working: two fitted ledgers ---------- */
+
+.work-sub {
+  margin: 16px 0 4px; color: var(--muted);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+}
+.work-sub:first-of-type { margin-top: 0; }
+table.working tr.subtotal td { border-top: 1px solid var(--ink); border-bottom: none; padding-top: 10px; }
+table.working tr.subtotal .wlabel { color: var(--ink); font-weight: 700; }
+table.working tr.subtotal .wval { font-weight: 700; font-size: 15px; }
+.work-note { color: var(--muted); font-size: 12.5px; margin: 12px 0 0; max-width: 62ch; }
+.netting {
+  margin: 0 0 16px; padding: 10px 0; max-width: 105ch;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px;
+}
 
 /* ---------- Colophon ---------- */
 

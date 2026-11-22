@@ -1,78 +1,78 @@
-// The implied-value model, version radar-comps-1. METHOD.md is its full statement.
+// radar-fit-2 pricing. Two fitted models, both fitted at run time on the
+// sealed snapshot (lib/fit.ts), price every candidate:
 //
-//   implied = multiple(category) x tvl_usd x scale x growth x maturity
+//   fitted launch value = exp(intercept + size_coef x ln TVL + category offset)
+//   launch odds         = sigmoid(intercept + size x z(ln TVL) + age x z(age)
+//                                 + growth x z(growth) + category offset)
+//   expected value      = fitted launch value x launch odds
 //
-//   multiple   the category's comparables multiple from lib/comps.ts (market cap per
-//              dollar of TVL among tokenised peers, clamped and shrunk to the global)
-//   scale      (tvl_usd / TVL_REF) ^ (ALPHA - 1) with ALPHA 0.85 and TVL_REF
-//              $100,000,000: sublinear in TVL, so the tenth dollar of TVL is not
-//              priced like the first and giant stale protocols do not run away
-//   growth     1 + clamp(change_7d, -60, 120)/100 x 0.5, clamped to [0.70, 1.60];
-//              an unreported change counts as no growth (factor 1)
-//   maturity   0.85 + 0.30 x min(age_days, 1095)/1095: a protocol that has run for
-//              years with no token has the scarcer, more proven claim; an unknown
-//              age counts as 365 days
+// board.json's implied_value_usd is the expected value: the ranking itself
+// prices launch risk, so a large protocol that rarely launches ranks below a
+// smaller one that usually does. METHOD.md is the full statement, with the
+// leave-one-out evidence for both models.
 //
-// Every input is a figure the snapshot itself carries, and no protocol name is ever
-// special-cased: the same function prices every row, and each row carries its own
-// arithmetic so the dashboard's detail view can show the working.
+// The printed working recomputes exactly. Every log and logit contribution is
+// rounded to six decimals before it is stored on the row; the fitted value is
+// the rounded exponential of the sum of the stored log parts, the odds are
+// the rounded sigmoid of the sum of the stored logit parts, and the expected
+// value is the rounded product of the two stored figures. The dashboard
+// detail view replays exactly these sums.
 
 import type { SnapshotProtocol } from './snapshot.ts';
-import { ageDays } from './snapshot.ts';
+import { growthFrac, round6, sigmoid, ODDS_AGE_CAP_DAYS, type OddsFit, type ValueFit } from './fit.ts';
 
 /** The model's name, stated in the outputs and the dashboard. */
-export const MODEL_VERSION = 'radar-comps-1';
+export const MODEL_VERSION = 'radar-fit-2';
 
-/** Sublinear TVL exponent: implied value grows with TVL^ALPHA, not TVL^1. */
-export const ALPHA = 0.85;
-/** The TVL at which the scale factor is exactly 1. */
-export const TVL_REF = 100_000_000;
-/** How much of a (clamped) seven-day TVL change passes into value. */
-export const GROWTH_WEIGHT = 0.5;
-export const GROWTH_FLOOR_PCT = -60;
-export const GROWTH_CAP_PCT = 120;
-export const GROWTH_FACTOR_MIN = 0.7;
-export const GROWTH_FACTOR_MAX = 1.6;
-/** The maturity factor's floor, its range, and the days over which it is earned. */
-export const MATURITY_BASE = 0.85;
-export const MATURITY_RANGE = 0.3;
-export const MATURITY_DAYS = 1095;
 /** The age an unlisted protocol is priced with. */
 export const UNKNOWN_AGE_DAYS = 365;
 
-/** One protocol's priced parts: the multiple and the three factors, for shown working. */
-export interface PricedParts {
-  multiple: number;
-  scale_factor: number;
-  growth_pct_used: number;
-  growth_factor: number;
-  age_days: number | null;
-  maturity_factor: number;
-  implied_value_usd: number;
+/** One protocol's fitted launch value, as the sum of its log parts. */
+export interface ValueLogParts {
+  intercept: number;
+  size: number;
+  category: number;
 }
 
-const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+/** One protocol's fitted launch odds, as the sum of its logit parts. */
+export interface OddsLogitParts {
+  intercept: number;
+  size: number;
+  age: number;
+  growth: number;
+  category: number;
+}
 
-/** Price one protocol. `multiple` comes from lib/comps.ts for its category. */
-export function price(p: SnapshotProtocol, asOf: string, multipleIn: number): PricedParts {
-  // The parts are rounded to 6 decimals first and the implied value is computed from
-  // the rounded parts, so the working printed on a row recomputes to that row's
-  // implied value exactly: the detail view's arithmetic is the board's arithmetic.
-  const multiple = round6(multipleIn);
-  const scale = round6(Math.pow(p.tvl_usd / TVL_REF, ALPHA - 1));
-  const growthPct = p.change_7d === null ? 0 : Math.min(GROWTH_CAP_PCT, Math.max(GROWTH_FLOOR_PCT, p.change_7d));
-  const growthFactor = round6(Math.min(GROWTH_FACTOR_MAX, Math.max(GROWTH_FACTOR_MIN, 1 + (growthPct / 100) * GROWTH_WEIGHT)));
-  const age = ageDays(asOf, p.listed_at);
-  const ageForModel = age ?? UNKNOWN_AGE_DAYS;
-  const maturity = round6(MATURITY_BASE + (Math.min(Math.max(ageForModel, 0), MATURITY_DAYS) / MATURITY_DAYS) * MATURITY_RANGE);
-  const implied = Math.max(1, Math.round(multiple * p.tvl_usd * scale * growthFactor * maturity));
-  return {
-    multiple,
-    scale_factor: scale,
-    growth_pct_used: growthPct,
-    growth_factor: growthFactor,
-    age_days: age,
-    maturity_factor: maturity,
-    implied_value_usd: implied,
+/** One protocol's priced parts: both models' shown working and the results. */
+export interface PricedParts {
+  value_log_parts: ValueLogParts;
+  fitted_value_usd: number;
+  logit_parts: OddsLogitParts;
+  launch_odds: number;
+  expected_value_usd: number;
+}
+
+/** Price one protocol with the two fitted models. */
+export function price(p: SnapshotProtocol, age: number | null, vf: ValueFit, of: OddsFit): PricedParts {
+  const value_log_parts: ValueLogParts = {
+    intercept: round6(vf.intercept),
+    size: round6(vf.size_coef * Math.log(p.tvl_usd)),
+    category: round6(vf.category_offset.get(p.category ?? '') ?? 0),
   };
+  const logSum = value_log_parts.intercept + value_log_parts.size + value_log_parts.category;
+  const fitted_value_usd = Math.round(Math.exp(logSum));
+
+  const ageYears = Math.min(age ?? UNKNOWN_AGE_DAYS, ODDS_AGE_CAP_DAYS) / 365;
+  const logit_parts: OddsLogitParts = {
+    intercept: round6(of.intercept),
+    size: round6(of.size_coef * ((Math.log(p.tvl_usd) - of.z_log_tvl.mean) / of.z_log_tvl.sd)),
+    age: round6(of.age_coef * ((ageYears - of.z_age_years.mean) / of.z_age_years.sd)),
+    growth: round6(of.growth_coef * ((growthFrac(p) - of.z_growth.mean) / of.z_growth.sd)),
+    category: round6(of.category_offset.get(p.category ?? '') ?? 0),
+  };
+  const logitSum = logit_parts.intercept + logit_parts.size + logit_parts.age + logit_parts.growth + logit_parts.category;
+  const launch_odds = round6(sigmoid(logitSum));
+  const expected_value_usd = Math.round(fitted_value_usd * launch_odds);
+
+  return { value_log_parts, fitted_value_usd, logit_parts, launch_odds, expected_value_usd };
 }

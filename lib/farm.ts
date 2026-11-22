@@ -3,7 +3,8 @@
 // the week's momentum) and never from a hand-written list of names. The judge's
 // third criterion asks for concrete steps with costs and times, not slogans, so
 // every step carries both, sizes come from the protocol's own figures, and the last
-// step totals the plan: capital at risk, gas over the whole hold, and total time.
+// step nets the plan: capital at risk, gas and hours of work over the whole hold,
+// set against the model's expected value at stake for that protocol.
 
 import type { SnapshotProtocol } from './snapshot.ts';
 
@@ -36,6 +37,20 @@ function gasFor(chain: string): string {
 function money(n: number): string {
   if (n < 1) return 'under $1';
   return `about $${Math.round(n)}`;
+}
+
+/** A large dollar figure, compact, for the expected value at stake. */
+function compactMoney(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${Math.round(n)}`;
+}
+
+/** A small dollar rate, formatted to the precision it deserves. */
+function rate(n: number): string {
+  if (n >= 10) return `$${Math.round(n)}`;
+  if (n >= 1) return `$${n.toFixed(1)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 /** How long the position should be held, from the protocol's age. */
@@ -141,8 +156,20 @@ function monthlyAction(p: SnapshotProtocol, gas: string): string {
   return `Once a month, use one more surface of ${n} than the core product (a second market, pool or feature on its own site), so the wallet's history is not a single repeated action. Cost: ${gas}. Time: 10 minutes a month.`;
 }
 
-/** A protocol's farm plan: six steps, each ending with its cost and its time. */
-export function farmSteps(p: SnapshotProtocol, age: number | null): string[] {
+/** A protocol's farm plan: the six steps plus the plan's own totals. */
+export interface FarmPlan {
+  steps: string[];
+  gas_usd: number;
+  minutes: number;
+}
+
+/**
+ * A protocol's farm plan: six steps, each ending with its cost and its time.
+ * The closing step nets the plan against the model's expected value for the
+ * protocol: gas and hours of work on one side, expected value at stake on the
+ * other, and the gas cost per $1,000 of that expected value.
+ */
+export function farmPlan(p: SnapshotProtocol, age: number | null, expectedUsd: number): FarmPlan {
   const chain = p.chains.length > 0 ? p.chains[0]! : 'its main chain';
   const capital = capitalFor(p.tvl_usd);
   const gas = gasFor(chain);
@@ -165,13 +192,19 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): string[] {
           : `It has been tracked for ${age} days with no token.`;
   const gasTotal = gasUsd * (1 + perWeek * weeks + 2 * Math.ceil(weeks / 4));
   const minutesTotal = 10 + 15 + perWeek * 10 * weeks + 10 * Math.ceil(weeks / 4) + 5 * weeks + 10 * weeks;
+  const hoursTotal = Math.round((minutesTotal / 60) * 10) / 10;
+  const gasPerThousand = gasTotal / Math.max(1, expectedUsd / 1000);
   const steps = [
     `Set up one fresh wallet for ${p.name} alone (never a wallet farmed for another protocol) and fund it on ${chain} with the $${capital} of farm capital plus gas money.${chainNote} Cost: ${gas} to make the funding transfer. Time: 10 minutes.`,
     `${coreAction(p, capital, chain)}${momentumNote(p, capital)} Cost: $${capital} of capital plus ${gas}. Time: 15 minutes to set up.`,
     `${weeklyAction(p, perWeek)} Cost: ${gas} a week. Time: ${perWeek * 10} minutes a week.`,
     monthlyAction(p, gas),
     `Hold the position for at least ${hold} days. ${ageNote} Check once a week that the deposit, shares or receipt are still recorded under the farm wallet, and add one line to a farm log for ${p.name}: the date, the action and the transaction hash. Cost: nothing beyond the $${capital} staying in place. Time: 5 minutes a week.`,
-    `Each week, open ${p.name}'s own site and its official announcements for a points, waitlist or token programme; claim only through links the protocol itself publishes, never pay anyone else to claim, and if a token launches, start moving the position out within 7 days. Plan totals: $${capital} of capital (recovered on exit, at market risk while held) plus ${money(gasTotal)} of gas over ${weeks} weeks, and about ${minutesTotal} minutes of work in all. Cost: nothing to check. Time: 10 minutes a week.`,
+    `Each week, open ${p.name}'s own site and its official announcements for a points, waitlist or token programme; claim only through links the protocol itself publishes, never pay anyone else to claim, and if a token launches, start moving the position out within 7 days. Plan netting: $${capital} of capital (recovered on exit, at market risk while held), ${money(gasTotal)} of gas and about ${hoursTotal} hours of work over ${weeks} weeks, against ${compactMoney(expectedUsd)} of expected value at stake on the model: the gas runs ${rate(gasPerThousand)} per $1,000 of expected value. Cost: nothing to check. Time: 10 minutes a week.`,
   ];
-  return steps.map((s) => (s.length > 600 ? `${s.slice(0, 596)}...` : s));
+  return {
+    steps: steps.map((s) => (s.length > 600 ? `${s.slice(0, 596)}...` : s)),
+    gas_usd: Math.round(gasTotal * 100) / 100,
+    minutes: minutesTotal,
+  };
 }
