@@ -76,6 +76,7 @@ h1 {
 .formula-label { color: var(--red); font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; margin-right: 16px; }
 .formula-body { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14.5px; }
 .formula-note { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.strip { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* ---------- Board ---------- */
 
@@ -126,6 +127,13 @@ table.board { width: 100%; border-collapse: collapse; }
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; vertical-align: 3px;
 }
+.sc {
+  display: inline-block; margin-left: 6px; padding: 1px 5px;
+  border: 1px solid var(--faint); color: var(--muted); background: transparent;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; vertical-align: 3px;
+}
+.ratio-out { color: var(--red); font-weight: 700; }
 .board td.cat, .board td.chains { color: var(--ink-soft); font-size: 13px; }
 .board td.implied { color: var(--red); font-weight: 700; font-size: 14.5px; }
 .up, .down, .flat { color: var(--ink); }

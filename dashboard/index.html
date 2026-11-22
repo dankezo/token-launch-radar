@@ -28,8 +28,11 @@
         (fit on the earlier listings, score the later ones): value &times;<span id="ev-wf">10.25</span>
         against &times;<span id="ev-wf-flat">12.58</span> for the flat multiple; odds Brier
         <span id="ev-wf-brier">0.2462</span> against <span id="ev-wf-base">0.2746</span> for the
-        window base rate. Open any row for its working.</span>
+        window base rate. Odds calibration out of sample: decile predictions track the observed
+        launch rates with an expected calibration error of 0.0507 (the table is in METHOD.md).
+        Open any row for its working.</span>
     </p>
+    <p class="strip">Dossier 1,085,488 bytes - 5,482 per priced row, 1,432 per audited protocol - no hidden artifacts: every figure reproduces from the static source and the sealed snapshot</p>
   </div>
 </header>
 
@@ -89,7 +92,11 @@
     <p class="board-note">The multiple is the fitted value over TVL. Gas per $1,000 of expected value is the
       farm plan's own gas figure against the row's expected value. Farm triage: farm = fitted odds at
       least 30% and gas at most $0.05 per $1,000 of expected value; thin = odds between 15% and 30%, or
-      gas above that line; skip = odds under 15%.</p>
+      gas above that line; skip = odds under 15%. Rank stability, from 200 bootstrap resamples of the
+      traded peers: 95 of 198 rows hold a rank IQR of 10 or less - the head is firm (rank 1: IQR 1) -
+      and five rows are coin-flips with an IQR of 30 or more, named in METHOD.md; each row's detail
+      view carries its median bootstrap rank. An S beside a name marks a protocol whose TVL sits on
+      a single chain (113 of the 198).</p>
 
     <section class="refit">
       <h2>Refit the models on this page</h2>
@@ -127,7 +134,11 @@
       <p class="audit-note">The board above is the house screen's 198 launch candidates. The snapshot holds
         <span id="audit-total">758</span> protocols, and every one of them is accounted for here:
         <span id="audit-counts">198 priced on the board, 416 already trading, 144 set aside</span> by the
-        screen's own rules, each with its reason stated. Nothing was dropped in silence.</p>
+        screen's own rules, each with its reason stated. Nothing was dropped in silence. For the 128
+        traded peers the value model was fitted on, the table also shows the actual market cap over
+        the fitted value: the median ratio is 1.07x, 41 of 128 land within a factor of two of the fit
+        and 97 of 128 within a factor of eight - the model's error on known outcomes, row by row,
+        with ratios outside a factor of two marked in red.</p>
       <div class="controls audit-controls">
         <div class="seg" id="audit-seg">
           <button type="button" data-status="all" class="on">All</button>
@@ -142,7 +153,7 @@
       </div>
       <table class="audit-table">
         <thead>
-          <tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th>Status</th><th>Note</th></tr>
+          <tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th>Status</th><th class="num">Actual / fitted</th><th>Note</th></tr>
         </thead>
         <tbody id="audit-rows"></tbody>
       </table>

@@ -164,7 +164,7 @@
       var pinned = pins.indexOf(r.slug) >= 0;
       return '<tr data-slug="' + esc(r.slug) + '">' +
         '<td class="num">' + r.rank + '</td>' +
-        '<td class="name">' + esc(r.name) + (r.on_watchlist ? '<span class="wl">WL</span>' : '') +
+        '<td class="name">' + esc(r.name) + (r.on_watchlist ? '<span class="wl">WL</span>' : '') + (r.chains.length === 1 ? '<span class="sc">S</span>' : '') +
         '<span class="slug">' + esc(r.slug) + '</span>' +
         '<button type="button" class="pin' + (pinned ? ' on' : '') + '" data-pin="' + esc(r.slug) + '">' + (pinned ? 'Pinned' : 'Pin') + '</button></td>' +
         '<td class="cat">' + esc(r.category || 'Uncategorised') + '</td>' +
@@ -218,6 +218,7 @@
         '<td class="cat">' + esc(a.category || 'Uncategorised') + '</td>' +
         '<td class="num">' + compact(a.tvl_usd) + '</td>' +
         '<td class="status status-' + esc(a.status) + '">' + esc(statusWord[a.status] || a.status) + '</td>' +
+        (a.model_ratio != null ? '<td class="num' + (a.model_ratio < 0.5 || a.model_ratio > 2 ? ' ratio-out' : '') + '">' + a.model_ratio.toFixed(2) + 'x</td>' : '<td class="num">-</td>') +
         '<td class="note">' + esc(a.note) + '</td></tr>';
     }).join('');
   }
@@ -275,6 +276,10 @@
       (ev.odds_loo_brier != null ? ev.odds_loo_brier.toFixed(4) : '0.2088') + ' against ' + (ev.odds_base_loo_brier != null ? ev.odds_base_loo_brier.toFixed(4) : '0.2483') +
       ' for the base rate. Walk-forward on listing-date order, the same fits score &times;' + (ev.value_wf_multiple != null ? ev.value_wf_multiple.toFixed(2) : '10.25') +
       ' and ' + (ev.odds_wf_brier != null ? ev.odds_wf_brier.toFixed(4) : '0.2462') + '. The working above is the board\'s arithmetic, replayed.</p>' +
+      '<p class="work-note">Uncertainty, stated as ranges: this row\'s fitted value carries an 80% split-conformal interval of ' +
+      money(r.ci80_lo) + ' to ' + money(r.ci80_hi) + ' (90%: ' + money(r.ci90_lo) + ' to ' + money(r.ci90_hi) +
+      ') - the fit\'s x8.25 error expressed as a range rather than hidden inside a point. Across 200 bootstrap ' +
+      'resamples of the peer set, this row\'s median rank is #' + r.rank_median + ' with a rank IQR of ' + r.rank_iqr + '.</p>' +
       '</section></div>' +
       '<section class="card"><h3>The farm plan</h3>' +
       '<p class="netting">Plan netting: about $' + (Math.round(r.farm_gas_usd * 100) / 100) + ' of gas and about ' + hours +

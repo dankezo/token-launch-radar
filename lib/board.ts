@@ -15,6 +15,7 @@ import type { OddsFit, ValueFit } from './fit.ts';
 import { round6, sigmoid } from './fit.ts';
 import { price, type OddsLogitParts, type PricedParts, type ValueLogParts } from './model.ts';
 import { farmPlan } from './farm.ts';
+import { CONFORMAL_Q80, CONFORMAL_Q90, RANK_BAND } from './round4.ts';
 
 /** One row of board.json: the gate's fields plus both models' shown working. */
 export interface BoardRow {
@@ -30,6 +31,12 @@ export interface BoardRow {
   on_watchlist: boolean;
   value_log_parts: ValueLogParts;
   fitted_value_usd: number;
+  ci80_lo: number;
+  ci80_hi: number;
+  ci90_lo: number;
+  ci90_hi: number;
+  rank_median: number;
+  rank_iqr: number;
   logit_parts: OddsLogitParts;
   launch_odds: number;
   implied_value_usd: number;
@@ -55,6 +62,7 @@ export function buildBoard(snapshot: Snapshot, vf: ValueFit, of: OddsFit): Board
   );
   return priced.map(({ p, age, parts }, i) => {
     const plan = farmPlan(p, age, parts.expected_value_usd, parts.launch_odds);
+    const band = RANK_BAND[p.slug] ?? [i + 1, 0];
     return {
       rank: i + 1,
       slug: p.slug,
@@ -68,6 +76,12 @@ export function buildBoard(snapshot: Snapshot, vf: ValueFit, of: OddsFit): Board
       on_watchlist: watch.has(p.slug),
       value_log_parts: parts.value_log_parts,
       fitted_value_usd: parts.fitted_value_usd,
+      ci80_lo: Math.round(parts.fitted_value_usd / Math.exp(CONFORMAL_Q80)),
+      ci80_hi: Math.round(parts.fitted_value_usd * Math.exp(CONFORMAL_Q80)),
+      ci90_lo: Math.round(parts.fitted_value_usd / Math.exp(CONFORMAL_Q90)),
+      ci90_hi: Math.round(parts.fitted_value_usd * Math.exp(CONFORMAL_Q90)),
+      rank_median: band[0],
+      rank_iqr: band[1],
       logit_parts: parts.logit_parts,
       launch_odds: parts.launch_odds,
       implied_value_usd: parts.expected_value_usd,

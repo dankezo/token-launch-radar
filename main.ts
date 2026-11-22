@@ -19,11 +19,12 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseSnapshot, ageDays, type Snapshot } from './lib/snapshot.ts';
+import { parseSnapshot, ageDays, type Snapshot, type SnapshotProtocol } from './lib/snapshot.ts';
 import { exclusionReasons, isCandidate, recordsToken, type TypedProtocol } from './lib/universe.ts';
 import { fitOddsModel, fitValueModel, round6, walkForward, VALUE_CAT_SHRINK, ODDS_CAT_SHRINK } from './lib/fit.ts';
 import { MODEL_VERSION } from './lib/model.ts';
 import { buildBoard, boardIssue, type BoardRow } from './lib/board.ts';
+import { BOOTSTRAP_SUMMARY, CALIBRATION_BINS, CALIBRATION_ECE, CONFORMAL_COVERAGE, CONFORMAL_HALFWIDTH80, CONFORMAL_HALFWIDTH90, CONFORMAL_Q80, CONFORMAL_Q90 } from './lib/round4.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -55,6 +56,25 @@ if (issue !== null) {
   process.stderr.write(`token radar: the pipeline wrote a board the gate refuses: ${issue}\n`);
   process.exit(1);
 }
+
+// Round-4 audit spotlight: for each traded peer the value model was fitted
+// on, the ratio of its actual market cap to the value the shipped fit
+// assigns it (same rounded-parts arithmetic as a board row). Computed here
+// from the live fit, so the audit view can show the model's error on known
+// outcomes row by row.
+const peerFitted = (p: SnapshotProtocol): number =>
+  Math.round(Math.exp(round6(valueFit.intercept) + round6(valueFit.size_coef * Math.log(p.tvl_usd)) + round6(valueFit.category_offset.get(p.category ?? '') ?? 0)));
+const isPeer = (p: SnapshotProtocol): boolean => recordsToken(p) && (p.mcap_usd ?? 0) > 0 && p.tvl_usd > 0;
+const peerRatios = snapshot.protocols.filter(isPeer).map((p) => (p.mcap_usd as number) / peerFitted(p));
+const ratioWithin = (x: number): number => peerRatios.filter((r) => r >= 1 / x && r <= x).length;
+const peerRatioStats = {
+  peers: peerRatios.length,
+  outside_band_05_20: peerRatios.filter((r) => r < 0.5 || r > 2).length,
+  within_x2: ratioWithin(2),
+  within_x4: ratioWithin(4),
+  within_x8: ratioWithin(8),
+  median_ratio: Math.round(([...peerRatios].sort((a, b) => a - b)[Math.floor(peerRatios.length / 2)] ?? 0) * 10000) / 10000,
+};
 
 mkdirSync(out, { recursive: true });
 
@@ -147,6 +167,23 @@ const modelFit = {
     loo_brier_no_category: round4(oddsFit.loo_brier_no_category),
     base_loo_brier: round4(oddsFit.base_loo_brier),
   },
+  round4: {
+    conformal: {
+      method: 'split-conformal on absolute log residuals (peers shuffled with mulberry32 seed 20261122; first 64 fit, last 64 calibrate; finite-sample quantile k = ceil((n + 1) x (1 - alpha))), plus a leave-one-out conformal variant',
+      q80_log: round6(CONFORMAL_Q80),
+      q90_log: round6(CONFORMAL_Q90),
+      halfwidth_multiple80: round2(CONFORMAL_HALFWIDTH80),
+      halfwidth_multiple90: round2(CONFORMAL_HALFWIDTH90),
+      coverage: CONFORMAL_COVERAGE,
+    },
+    bootstrap_rank_stability: BOOTSTRAP_SUMMARY,
+    odds_calibration: {
+      method: 'leave-one-out probabilities for all 758 protocols, deciles by (probability, slug); ECE is the count-weighted mean absolute gap between mean predicted and observed rate',
+      ece: round4(CALIBRATION_ECE),
+      bins: CALIBRATION_BINS.map(([n, mean_predicted, observed_rate]) => ({ n, mean_predicted, observed_rate })),
+    },
+    peer_ratios: peerRatioStats,
+  },
   walk_forward: {
     protocol:
       'expanding window over listing-date order (listed_at ascending, slug tiebreak; no listing date ordered as as_of minus 365 days); value: first train 64 peers, test blocks of 16; odds: first train 379 protocols, test blocks of 95, standardisation constants and base rate recomputed inside every training window',
@@ -179,6 +216,8 @@ const evidence = {
   odds_base_rate: round4(oddsFit.base_rate),
   odds_loo_brier: round4(oddsFit.loo_brier),
   odds_base_loo_brier: round4(oddsFit.base_loo_brier),
+  odds_calibration_ece: round4(CALIBRATION_ECE),
+  peers_with_ratio: peerRatioStats.peers,
   value_wf_multiple: round2(Math.exp(wf.value.rmse)),
   value_flat_wf_multiple: round2(Math.exp(wf.value_flat.rmse)),
   odds_wf_brier: round4(wf.odds_brier),
@@ -203,6 +242,7 @@ const audit = typed.map((t) => {
       age_days: t.age_days,
       change_7d: t.change_7d,
       status: 'trading',
+      ...(isPeer(t) ? { model_ratio: Math.round(((t.mcap_usd as number) / peerFitted(t)) * 1000) / 1000 } : {}),
       note: t.mcap_usd !== null ? `Already trading, market cap $${Math.round(t.mcap_usd).toLocaleString('en-US')}` : 'Token recorded; no market cap in the snapshot',
     };
   }

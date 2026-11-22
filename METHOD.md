@@ -157,6 +157,114 @@ still reads a pattern across one record (assumption 2), and the walk-forward
 says that pattern is not an artefact of fitting the future into the past. The
 full protocol and figures are in model-fit.json under walk_forward.
 
+## Uncertainty and calibration, measured
+
+The tables above score the fits as points. This section states the same
+fits as ranges and distributions, measured on the sealed snapshot under
+definitions frozen before the numbers were run. None of it changes a
+price: every board row's fitted value, odds and expected value are the
+shipped figures, and each row now also carries its interval and rank
+band so the uncertainty travels with the number it belongs to.
+
+### Split-conformal intervals for the value model
+
+Method: the 128 traded peers are shuffled with a fixed seed
+(mulberry32, 20261122); the first 64 refit the value model, the last 64
+form the calibration half. The conformal quantile of the calibration
+half's absolute log residuals (finite-sample rule k = ceil((n + 1) x
+(1 - alpha))) gives a half-width in log space: the 80% quantile is
+2.752, the 90% quantile is 4.154. A leave-one-out variant, where each
+peer's interval comes from the other 127 peers' absolute leave-one-out
+residuals, corroborates. Empirical coverage, measured on the peers:
+
+| variant | 80% level | 90% level |
+|---|---|---|
+| split-conformal (64 calibration peers) | 81.25% (52 of 64) | 92.19% (59 of 64) |
+| leave-one-out conformal (128 peers) | 80.47% (103 of 128) | 90.63% (116 of 128) |
+
+All four sit within four points of nominal, the band set before the
+run. The cost is stated as plainly as the coverage: the intervals are
+wide, a half-width multiple of about x15.7 at the 80% level and x63.7
+at 90%. Rank 1's fitted $39,976,167 carries an 80% interval of
+$2,550,494 to $626,582,181 and a 90% interval of $627,998 to
+$2,544,745,650. That width is not a defect of the method; it is the
+x8.25 typical error of the value model stated as a range instead of
+being hidden inside a point estimate. Every board row carries its 80%
+and 90% intervals (ci80_lo, ci80_hi, ci90_lo, ci90_hi), and the detail
+view shows them beside the working.
+
+### Rank stability under bootstrap resampling
+
+Method: the 128 traded peers are resampled with replacement 200 times
+(mulberry32, seed 20261123); the value model is refitted on each
+resample and the 198 board rows re-ranked by bootstrap fitted value
+times the shipped launch odds (the odds are not refitted; ties break
+by slug). Each row carries its bootstrap median rank and rank IQR
+(rank_median, rank_iqr).
+
+- 95 of 198 rows (48.0%) are stable: rank IQR at most 10.
+- 98 rows sit in between (IQR 11 to 29).
+- 5 rows are coin-flips, IQR at least 30: templar-lending (shipped
+  rank 71, IQR 30.0), fira (99, 30.0), predict-fun (104, 35.3), vesu
+  (110, 31.3) and bend (124, 30.5).
+
+The head of the board is firm: rank 1, polymarket-international, has
+bootstrap median rank 1 and IQR 1.0; rank 4's IQR is 2.0; the last row's
+IQR is 0.0. The middle is substantially sampling noise: flux-finance,
+the worked example at rank 32 below, has bootstrap median rank 36 and
+IQR 20.0 - the middle half of resamples place it between ranks 27 and
+47, so its shipped position sits at the flattering edge of its own
+distribution. Any reading of the board that treats rank 60 as
+meaningfully ahead of rank 85 is stronger than this evidence allows,
+and the board now says so on its face.
+
+### Odds calibration, by decile
+
+Leave-one-out probabilities for all 758 protocols (never in-sample),
+sorted into deciles by (probability, slug). The expected calibration
+error - the count-weighted mean absolute gap between mean predicted
+probability and observed launch rate - is 0.0507. The overall mean
+prediction is 0.5476 against a base rate of 0.5488.
+
+| bin | n | mean predicted | observed rate | gap |
+|---|---|---|---|---|
+| 1 | 75 | 0.1856 | 0.1467 | 0.0390 |
+| 2 | 76 | 0.3528 | 0.2763 | 0.0765 |
+| 3 | 76 | 0.4287 | 0.5526 | 0.1240 |
+| 4 | 76 | 0.4795 | 0.5263 | 0.0468 |
+| 5 | 76 | 0.5248 | 0.5132 | 0.0117 |
+| 6 | 75 | 0.5712 | 0.4667 | 0.1045 |
+| 7 | 76 | 0.6306 | 0.6579 | 0.0273 |
+| 8 | 76 | 0.6889 | 0.6842 | 0.0047 |
+| 9 | 76 | 0.7552 | 0.8158 | 0.0606 |
+| 10 | 76 | 0.8546 | 0.8421 | 0.0125 |
+
+The model is well calibrated at the extremes and in aggregate. The
+middle wobbles: bin 3 under-predicts by 12.4 points (predicted 0.4287,
+observed 0.5526) and bin 6 over-predicts by 10.5 points (predicted
+0.5712, observed 0.4667), with bin 2 over by 7.7 points. The fitted
+curve is flatter than the record through the 0.40 to 0.60 band. The
+table is published beside the odds rather than used to refit them:
+monotone recalibration of these same probabilities (Platt, isotonic)
+was tested out of sample and buys nothing, so the wobble is disclosed,
+not smoothed over.
+
+### Model error on known outcomes
+
+The audit view carries, for each of the 128 traded peers the value
+model was fitted on, the ratio of its actual market cap to the value
+the shipped fit assigns it - the model's error where the answer is
+already known. The frozen check for this display, set before it was
+computed: if more than 70% of the ratios fell outside the factor-of-two
+band [0.5, 2.0], the band display would be dropped. Measured: 87 of
+128 (68.0%) fall outside, inside the line, so the column ships with
+out-of-band ratios marked. The full distribution: median ratio 1.07;
+41 of 128 (32.0%) land within a factor of two of the fit, 69 of 128
+(53.9%) within a factor of four, 97 of 128 (75.8%) within a factor of
+eight and 109 of 128 (85.2%) within a factor of sixteen. This is the
+in-sample companion to the leave-one-out table above, and it is not
+flattering: it is the same x8.25 story told peer by peer.
+
 ## Assumptions, stated
 
 1. Market cap stands in for launch value because the snapshot carries no FDV,
@@ -225,8 +333,10 @@ on the logit): a modest fitted value at the board's near-highest odds.
 - The dashboard shows all three numbers per row (fitted value, launch odds,
   expected value) plus the implied multiple and the gas per $1,000 of
   expected value, replays both models' working in the detail view with the
-  out-of-sample scores stated beside it, and carries the audit view over all
-  758 protocols described above. It also triages every plan (farm, thin or
+  out-of-sample scores stated beside it, together with the row's conformal
+  interval and bootstrap rank band, and carries the audit view over all
+  758 protocols described above, including each traded peer's
+  actual-over-fitted ratio. It also triages every plan (farm, thin or
   skip, from the row's odds and gas per $1,000 of expected value, the rule
   stated on the page), pins up to three protocols side by side in a compare
   tray with their working, filters by a minimum TVL, and refits both models
@@ -244,3 +354,11 @@ on the logit): a modest fitted value at the board's near-highest odds.
 - No term ships on a story. Growth and age were cut from the value model on
   the published leave-one-out table, not kept because the brief names them;
   they are in the odds model because that is where they win.
+- No farm portfolio layer ships. An exact 0/1 knapsack over the board's
+  rows (maximising total expected value under frozen budgets of $250 gas
+  and 1,200 minutes, and of $750 and 3,600 minutes) was solved and
+  compared with the simple greedy rule of taking rows by expected value
+  per minute: the exact optimum beat the greedy portfolio by 2.64% and
+  0.70% respectively, under the 5% bar set before the comparison was
+  run. Greedy triage is already within about 3% of optimal on this
+  board, so no optimisation claim is made for it.
